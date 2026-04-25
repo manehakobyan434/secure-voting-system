@@ -1,46 +1,95 @@
-# 🗳️ Secure Voting System (Solidity)
+#  Secure Voting System (Solidity)
 
-A decentralized voting smart contract built in Solidity that allows an owner to create elections, add candidates, and enable secure one-wallet-one-vote voting.
+# A decentralized voting smart contract built in Solidity that allows an owner to create elections, add candidates, and enable secure one-wallet-one-vote voting.
 
----
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.13;
 
-## 🚀 Features
+contract VotingSystem {
+    address public owner;
+    uint public electionCount;
 
-- Create multiple elections
-- Add candidates before voting starts
-- One wallet = one vote per election
-- Time-based voting system
-- Event logging for frontend integration
-- Anti double-voting protection
+    mapping(uint => Election) public elections;
+    mapping(uint => Candidate[]) public electionCandidates;
+    mapping(uint => mapping(address => bool)) public hasVoted;
 
----
+    event ElectionCreated(uint indexed electionId, string name);
+    event CandidateAdded(uint indexed electionId, string name);
+    event Voted(uint indexed electionId, address voter, uint candidateIndex);
 
-## 🧠 Key Concepts Used
+    modifier onlyOwner() {
+        require(msg.sender == owner, "Only owner can call this function");
+        _;
+    }
 
-- Mappings (data storage)
-- Structs (Election, Candidate)
-- Access control (onlyOwner modifier)
-- Events (Blockchain logging)
-- Time-based restrictions (block.timestamp)
-- Storage vs Memory usage
+    constructor() {
+        owner = msg.sender;
+    }
 
----
+    struct Election {
+        string name;
+        uint startTime;
+        uint endTime;
+        bool exists;
+    }
 
-## ⚠️ Known Limitation
+    struct Candidate {
+        string name;
+        uint voteCount;
+    }
 
-This system prevents double voting per wallet, but does not prevent users from creating multiple wallets (Sybil attack problem), which is a known limitation in most blockchain voting systems.
+    function createElection(string memory _name, uint _duration) public onlyOwner {
+        require(_duration > 0, "Duration must be greater than 0");
 
----
+        electionCount++;
 
-## 🛠️ Future Improvements
+        elections[electionCount] = Election({
+            name: _name,
+            startTime: block.timestamp,
+            endTime: block.timestamp + _duration,
+            exists: true
+        });
 
-- Add frontend (React + Ethers.js)
-- Add candidate IDs instead of index
-- Add results / winner function
-- Add whitelist or identity verification system
+        emit ElectionCreated(electionCount, _name);
+    }
 
----
+    
+    function addCandidate(uint _electionId, string memory _name) public onlyOwner {
+        require(elections[_electionId].exists, "Election does not exist");
+        require(block.timestamp < elections[_electionId].startTime, "Election already started");
 
-## 👨‍💻 Author
+        electionCandidates[_electionId].push(
+            Candidate({
+                name: _name,
+                voteCount: 0
+            })
+        );
 
-Built while learning Solidity & Smart Contracts.
+        emit CandidateAdded(_electionId, _name);
+    }
+
+    function vote(uint _electionId, uint _candidateIndex) public {
+        require(elections[_electionId].exists, "Election does not exist");
+
+        Election storage election = elections[_electionId];
+
+        require(block.timestamp >= election.startTime, "Election not started");
+        require(block.timestamp <= election.endTime, "Election ended");
+
+        require(!hasVoted[_electionId][msg.sender], "Already voted");
+
+        Candidate[] storage candidates = electionCandidates[_electionId];
+        require(_candidateIndex < candidates.length, "Invalid candidate");
+
+        candidates[_candidateIndex].voteCount++;
+
+        hasVoted[_electionId][msg.sender] = true;
+
+        emit Voted(_electionId, msg.sender, _candidateIndex);
+    }
+
+    function getCandidates(uint _electionId)public view returns (Candidate[] memory)
+    {
+        return electionCandidates[_electionId];
+    }
+}
